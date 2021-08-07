@@ -8,7 +8,7 @@ sh wtsync.sh {action} {document_id} {file}"
 ```
 
 > **Important**:
-> 1. ensure `~/.wordstree exists`
+> 1. ensure `~/.wordstree` exists
 > 2. ensure token is a line
 
 ## Start
