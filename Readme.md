@@ -3,7 +3,7 @@
 
 ## Usage
 
-````shell
+```shell
 sh wtsync.sh {action} {document_id} {file}"
 ```
 
