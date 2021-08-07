@@ -1,5 +1,6 @@
 #!/bin/bash
 
+WORDSTREE_API=http://dashboard.wordstree.com
 CONFIG_PATH="/home/$USER/.wordstree"
 ACTION=""
 DOCID=""
@@ -8,6 +9,7 @@ TOKEN=""
 
 die () {
     echo >&2 "$@"
+    echo ""
     help
     exit 1
 }
@@ -38,28 +40,30 @@ setup()
   fi
   
   # If the token is not in the config file, we begin the auth process
-  if ! grep -Fq "token=" "$CONFIG_PATH" 
-  then
+  if ! grep -Fq "token=" "$CONFIG_PATH" ; then
     printf "Wordstree Token not found, Initiating Auth process\n"
     auth
+    die ""
   fi
 
   # Retreive the token and assign it to a variable
   TOKEN=$(read_var token "$CONFIG_PATH")  
   
   # Ensure we have 3 parameters
-  [ "$#" -eq 3 ] || die "3 argument required, $# provided"
+  [ "$#" -ge 3 ] || die "3 argument required, $# provided"
   
   # Ensure that we have a valid action
   [[ $1 == "push" || $1 == "pull" ]] || die "Action must be either 'push' or 'pull'.  $1 provided"
   ACTION="$1"
+
   # Ensure that Document ID is an integer (other validation occurs during sync)
   echo $2 | grep -E -q '^[0-9]+$' || die "Document ID must be a valid integer.  $2 provided"
   DOCID="$2"
+
   # Ensure that file path is valid and file exists
-  if [ ! -f "$3" ] ; then
+  if [ -f "$3" ] ; then
     die "Invalid File Path.  $3 provided"
-  fi	 
+  fi
   FILEPATH="$3"
 }
 
@@ -71,7 +75,7 @@ auth()
   EMAIL="email=$EMAIL"
   PWD="password=$PWD"
   
-  WTRESPONSE=$(curl --location --request POST 'https://dashboard.wordstree.com/api/login' \
+  WTRESPONSE=$(curl --location --request POST '${WORDSTREE_API}/api/login' \
 --header 'Content-Type: application/x-www-form-urlencoded' \
 --header 'Accept: application/json' \
 --data-urlencode $EMAIL \
@@ -85,24 +89,63 @@ auth()
   fi
 }
 
-
 checkdoc()
 {
+  if [[ $2 && $2 == '--markdown' ]]; then
+    # get pure markdown
+    $(curl -o $1 --location --request GET "$WORDSTREE_API/api/markdown-documents/$DOCID/download" \
+    --header 'Content-Type: application/json' \
+    --header 'Accept: application/json' \
+    --header "Authorization: Bearer $TOKEN" )
+    exit 1
+  fi
 
-	
- $(curl --location --request GET 'https://dashboard.wordstree.com/api/markdown-documents/${DOCID}' \
-	--header 'Content-Type: application/json' \
-	--header 'Accept: application/json' \
-	--header 'Authroization: Bearer ${TOKEN}' )
-#	echo "$WTRESP"
+  if [[ $1 == '--show' ]]; then
+    # get pure markdown
+    echo $(curl -s --location --request GET "$WORDSTREE_API/api/markdown-documents/$DOCID/download" \
+    --header 'Content-Type: application/json' \
+    --header 'Accept: application/json' \
+    --header "Authorization: Bearer $TOKEN" ) > .temp
+    less .temp
+    rm .temp
+    exit 1
+  fi
 
+  # get JSON
+  echo $(curl -o $1 --location --request GET "$WORDSTREE_API/api/markdown-documents/$DOCID" \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json' \
+  --header "Authorization: Bearer $TOKEN" )
 }
+
+checkdependency()
+{
+  jqcommand=$(echo $(command -v $1) | wc -c)
+  if [[ ${#jqcommand} < 2 ]]; then
+    echo $1;
+    return 1
+  fi
+
+  return 0
+}
+
+checkdependencies()
+{
+  DEPENDENCIES_OUTPUT=""
+  DEPENDENCIES_OUTPUT="${DEPENDENCIES_OUTPUT} $(checkdependency jq)"
+  DEPENDENCIES_OUTPUT="${DEPENDENCIES_OUTPUT} $(checkdependency curl)"
+
+  if [[ ${#DEPENDENCIES_OUTPUT} > 3 ]]; then
+    echo "################################"
+    echo "Dependencies missing: ${DEPENDENCIES_OUTPUT}"
+    echo "################################"
+    exit 1
+  fi
+}
+
+checkdependencies
 
 # This is really a setup and validate function
 setup "$@"
 
-
-checkdoc
-
-
-
+checkdoc $3 $4
